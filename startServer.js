@@ -16,7 +16,6 @@ async function startFalixServer(discordChannel = null) {
         '--start-maximized'
       ],
       defaultViewport: null,
-      userDataDir: './user-session'
     });
 
     const page = await browser.newPage();
