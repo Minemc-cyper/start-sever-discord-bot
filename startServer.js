@@ -41,12 +41,11 @@ async function startFalixServer(discordChannel = null) {
     await new Promise(resolve => setTimeout(resolve, 5000));
 
     // 🛡️ Tự động xử lý popup đánh giá nếu tồn tại
-    const popupCancel = await page.$x("//button[contains(text(), 'Cancel')]");
-    if (popupCancel.length > 0) {
-      console.log('⚠️ Phát hiện popup đánh giá Falix. Đang bấm Cancel...');
-      await popupCancel[0].click();
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
+    await page.evaluate(() => {
+      const buttons = [...document.querySelectorAll('button')];
+      const cancelBtn = buttons.find(b => b.innerText.trim().toLowerCase() === 'cancel');
+      if (cancelBtn) cancelBtn.click();
+    });
 
     await page.screenshot({ path: 'falix_debug.png' });
 
