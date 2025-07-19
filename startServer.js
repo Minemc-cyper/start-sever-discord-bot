@@ -53,7 +53,7 @@ async function startFalixServer(discordChannel = null) {
 
     if (closedPopup) {
       console.log('✅ Popup đã bấm Cancel. Chờ biến mất...');
-      await page.waitForTimeout(500);
+      await new Promise(resolve => setTimeout(resolve, 800));
       await page.waitForFunction(() => {
         const popupText = Array.from(document.querySelectorAll('*'))
           .some(el => el.textContent?.includes('Enjoying Falix?'));
