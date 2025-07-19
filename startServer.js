@@ -37,6 +37,9 @@ async function startFalixServer() {
     });
 
    await new Promise(resolve => setTimeout(resolve, 8000));
+
+   await page.screenshot({ path: 'falix_debug.png' });
+
 ;
 
     const buttons = await page.$$('button');
