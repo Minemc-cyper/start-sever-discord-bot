@@ -41,11 +41,25 @@ async function startFalixServer(discordChannel = null) {
     await new Promise(resolve => setTimeout(resolve, 5000));
 
     // 🛡️ Tự động xử lý popup đánh giá nếu tồn tại
-    await page.evaluate(() => {
-      const buttons = [...document.querySelectorAll('button')];
-      const cancelBtn = buttons.find(b => b.innerText.trim().toLowerCase() === 'cancel');
-      if (cancelBtn) cancelBtn.click();
-    });
+   const closedPopup = await page.evaluate(() => {
+    const buttons = [...document.querySelectorAll('button')];
+    const cancelBtn = buttons.find(b => b.innerText.trim().toLowerCase() === 'cancel');
+    if (cancelBtn) {
+      cancelBtn.click();
+      return true;
+  }
+  return false;
+});
+
+if (closedPopup) {
+  console.log('✅ Popup đã bấm Cancel. Chờ biến mất...');
+  await page.waitForFunction(() => {
+    const modal = document.querySelector('[class*="Modal"], [class*="modal"]');
+    return !modal || modal.offsetParent === null;
+  }, { timeout: 5000 }).catch(() => {
+    console.warn('⚠️ Không chắc popup đã biến mất hoàn toàn.');
+  });
+}
 
     await page.screenshot({ path: 'falix_debug.png' });
 
