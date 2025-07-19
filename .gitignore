@@ -1,0 +1,5 @@
+.env
+falix-cookies.json
+user-session/
+node_modules/
+falix_debug.png
