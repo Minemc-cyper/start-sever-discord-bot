@@ -1,8 +1,8 @@
 // 📁 startServer.js
+require('dotenv').config();
 const fs = require('fs');
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-const { COOKIE_PATH, DISCORD_CHANNEL_ID } = require('./config');
 
 puppeteer.use(StealthPlugin());
 
@@ -26,10 +26,12 @@ async function startFalixServer(discordChannel = null) {
     const currentIP = await page.evaluate(() => document.body.innerText);
     console.log(`🌍 Puppeteer IP hiện tại là: ${currentIP}`);
 
-    if (fs.existsSync(COOKIE_PATH)) {
-      const cookies = JSON.parse(fs.readFileSync(COOKIE_PATH, 'utf8'));
-      await page.setCookie(...cookies);
-    }
+    // Đọc cookie từ biến môi trường
+    const cookieRaw = process.env.FALIX_COOKIE_JSON;
+    if (!cookieRaw) throw new Error('Thiếu biến môi trường FALIX_COOKIE_JSON');
+
+    const cookies = JSON.parse(cookieRaw);
+    await page.setCookie(...cookies);
 
     await page.goto('https://client.falixnodes.net/server/console', {
       waitUntil: 'networkidle2',
