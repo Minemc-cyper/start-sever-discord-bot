@@ -56,7 +56,7 @@ if (closedPopup) {
   await page.waitForFunction(() => {
     const modal = document.querySelector('[class*="Modal"], [class*="modal"]');
     return !modal || modal.offsetParent === null;
-  }, { timeout: 5000 }).catch(() => {
+  }, { timeout: 8000 }).catch(() => {
     console.warn('⚠️ Không chắc popup đã biến mất hoàn toàn.');
   });
 }
