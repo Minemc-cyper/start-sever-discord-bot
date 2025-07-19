@@ -1,18 +1,21 @@
 {
   "name": "falix-discord-bot",
   "version": "1.0.0",
-  "description": "Bot Discord điều khiển Falix Server",
+  "description": "Bot Discord điều khiển và kiểm tra trạng thái FalixNodes Minecraft Server",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
   },
+  "author": "yourname",
+  "license": "MIT",
   "dependencies": {
-    "discord.js": "^14.13.0",
-    "dotenv": "^16.3.1",
-    "minecraft-server-util": "^5.2.0",
-    "puppeteer": "^21.3.8",
-    "puppeteer-extra": "^3.3.4",
-    "puppeteer-extra-plugin-stealth": "^2.11.1"
+    "axios": "^1.10.0",
+    "discord.js": "^14.21.0",
+    "dotenv": "^17.2.0",
+    "minecraft-server-util": "^5.4.4",
+    "mineflayer": "^4.30.0",
+    "puppeteer": "^24.14.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   }
 }
-

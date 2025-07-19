@@ -1,5 +1,27 @@
+# 💡 Ignore environment variables and secrets
 .env
+.env.local
 falix-cookies.json
 user-session/
+
+# 💡 Node dependencies
 node_modules/
+
+# 💡 Output files
 falix_debug.png
+*.log
+
+# 💡 OS / Editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# 💡 Optional: ignore ZIP or archives
+*.zip
+*.tar.gz
+
+# 💡 Railway-specific cache (if any)
+.nixpacks/
