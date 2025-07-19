@@ -36,7 +36,8 @@ async function startFalixServer() {
       timeout: 60000
     });
 
-    await page.waitForTimeout(7000);
+   await new Promise(resolve => setTimeout(resolve, 8000));
+;
 
     const buttons = await page.$$('button');
     console.log(`🔍 Tìm thấy ${buttons.length} nút:`);
