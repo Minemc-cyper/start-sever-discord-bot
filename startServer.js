@@ -11,6 +11,8 @@ async function startFalixServer() {
     const browser = await puppeteer.launch({
       headless: 'new',
       args: [
+        '--disable-setuid-sandbox',
+        '--no-sandbox',
         '--start-maximized'
       ],
       defaultViewport: null,
