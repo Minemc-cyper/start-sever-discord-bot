@@ -1,10 +1,14 @@
 // 📁 startServer.js
 require('dotenv').config();
 const fs = require('fs');
+const util = require('minecraft-server-util');
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 
 puppeteer.use(StealthPlugin());
+
+const MC_HOST = process.env.MC_HOST;
+const MC_PORT = parseInt(process.env.MC_PORT);
 
 async function startFalixServer(discordChannel = null) {
   try {
@@ -15,7 +19,7 @@ async function startFalixServer(discordChannel = null) {
         '--disable-setuid-sandbox',
         '--start-maximized'
       ],
-      defaultViewport: null,
+      defaultViewport: null
     });
 
     const page = await browser.newPage();
@@ -52,17 +56,25 @@ async function startFalixServer(discordChannel = null) {
 
     if (closedPopup) {
       console.log('✅ Popup đã bấm Cancel. Chờ biến mất...');
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 500));
       await page.waitForFunction(() => {
         const popupText = Array.from(document.querySelectorAll('*'))
           .some(el => el.textContent?.includes('Enjoying Falix?'));
         return !popupText;
       }, { timeout: 7000 }).catch(() => {
-        console.warn('⚠️ Không chắc popup đã biến mất hoàn toàn.');
+        console.warn('⚠️ Không chắc popup đã bị ẩn hoàn toàn.');
       });
     }
 
-    await page.screenshot({ path: 'falix_debug.png' });
+    // 📸 Chụp ảnh màn hình an toàn
+    try {
+      console.log('📸 Đang chụp ảnh falix_debug.png...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await page.screenshot({ path: 'falix_debug.png', fullPage: true });
+      console.log('✅ Đã chụp ảnh');
+    } catch (screenshotErr) {
+      console.warn('⚠️ Không thể chụp ảnh màn hình:', screenshotErr.message);
+    }
 
     const buttons = await page.$$('button');
     console.log(`🔍 Tìm thấy ${buttons.length} nút:`);
@@ -88,8 +100,21 @@ async function startFalixServer(discordChannel = null) {
 
         await btn.click();
         await browser.close();
-        if (discordChannel) await discordChannel.send({ content: '✅ Đã gửi lệnh bật server!', files: ['falix_debug.png'] });
-        return { success: true, message: '✅ Đã gửi lệnh bật server!' };
+
+        // ✅ Đợi 10 giây rồi kiểm tra trạng thái server
+        if (discordChannel) await discordChannel.send({ content: '⏳ Đang kiểm tra xem server có khởi động không...', files: ['falix_debug.png'] });
+        await new Promise(resolve => setTimeout(resolve, 10000));
+
+        try {
+          const status = await util.status(MC_HOST, MC_PORT);
+          const msg = `🟢 Server đã khởi động thành công! Người chơi: ${status.players.online}/${status.players.max}`;
+          await discordChannel.send(msg);
+          return { success: true, message: msg };
+        } catch (pingErr) {
+          const failMsg = '⚠️ Đã gửi lệnh Start nhưng không thấy server phản hồi sau 10 giây.';
+          await discordChannel.send(failMsg);
+          return { success: false, message: failMsg };
+        }
       }
     }
 
