@@ -2,17 +2,17 @@
 const fs = require('fs');
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-const { COOKIE_PATH } = require('./config');
+const { COOKIE_PATH, DISCORD_CHANNEL_ID } = require('./config');
 
 puppeteer.use(StealthPlugin());
 
-async function startFalixServer() {
+async function startFalixServer(discordChannel = null) {
   try {
     const browser = await puppeteer.launch({
       headless: 'new',
       args: [
-        '--disable-setuid-sandbox',
         '--no-sandbox',
+        '--disable-setuid-sandbox',
         '--start-maximized'
       ],
       defaultViewport: null,
@@ -36,11 +36,8 @@ async function startFalixServer() {
       timeout: 60000
     });
 
-   await new Promise(resolve => setTimeout(resolve, 8000));
-
-   await page.screenshot({ path: 'falix_debug.png' });
-
-;
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    await page.screenshot({ path: 'falix_debug.png' });
 
     const buttons = await page.$$('button');
     console.log(`🔍 Tìm thấy ${buttons.length} nút:`);
@@ -52,6 +49,7 @@ async function startFalixServer() {
 
       if (clean === 'stop') {
         await browser.close();
+        if (discordChannel) await discordChannel.send({ content: '🟢 Server đã đang chạy sẵn.', files: ['falix_debug.png'] });
         return { success: true, message: '🟢 Server đã đang chạy sẵn rồi.' };
       }
 
@@ -59,22 +57,27 @@ async function startFalixServer() {
         const isDisabled = await page.evaluate(button => button.disabled, btn);
         if (isDisabled) {
           await browser.close();
+          if (discordChannel) await discordChannel.send({ content: '🚫 Nút Start bị vô hiệu hoá. Có thể cần kích hoạt thủ công.', files: ['falix_debug.png'] });
           return { success: false, message: '🚫 Nút Start bị vô hiệu hoá. Có thể cần kích hoạt lần đầu.' };
         }
 
         await btn.click();
-        await page.screenshot({ path: 'falix_debug.png' });
         await browser.close();
+        if (discordChannel) await discordChannel.send({ content: '✅ Đã gửi lệnh bật server!', files: ['falix_debug.png'] });
         return { success: true, message: '✅ Đã gửi lệnh bật server!' };
       }
     }
 
     await browser.close();
+    if (discordChannel) await discordChannel.send({ content: '❌ Không tìm thấy nút Start hay Stop. Giao diện có thể đã thay đổi.', files: ['falix_debug.png'] });
     return {
       success: false,
       message: '❌ Không tìm thấy nút Start hay Stop. Giao diện có thể đã thay đổi.'
     };
   } catch (err) {
+    if (discordChannel && fs.existsSync('falix_debug.png')) {
+      await discordChannel.send({ content: `❌ Lỗi khi bật server: ${err.message}`, files: ['falix_debug.png'] });
+    }
     return {
       success: false,
       message: err.message || 'Lỗi không xác định khi truy cập Falix'
