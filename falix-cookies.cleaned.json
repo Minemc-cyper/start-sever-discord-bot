@@ -1,0 +1,30 @@
+[
+  {
+    "domain": ".falixnodes.net",
+    "expirationDate": 1755493542.757922,
+    "hostOnly": false,
+    "httpOnly": true,
+    "name": "LoggedIn",
+    "path": "/",
+    "sameSite": "lax",
+    "secure": true,
+    "session": false,
+    "storeId": "0",
+    "value": "71902354",
+    "id": 10
+  },
+  {
+    "domain": "client.falixnodes.net",
+    "expirationDate": 1754111105.634729,
+    "hostOnly": true,
+    "httpOnly": true,
+    "name": "SESSION",
+    "path": "/",
+    "sameSite": "lax",
+    "secure": true,
+    "session": false,
+    "storeId": "0",
+    "value": "ft7dcridoe39gdonsat1a6goev",
+    "id": 15
+  }
+]

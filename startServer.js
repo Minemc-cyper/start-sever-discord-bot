@@ -7,132 +7,202 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 
 puppeteer.use(StealthPlugin());
 
+// Minecraft server config
 const MC_HOST = process.env.MC_HOST;
-const MC_PORT = parseInt(process.env.MC_PORT);
+const MC_PORT = parseInt(process.env.MC_PORT, 10);
+
+// Proxy config
+const PROXY_HOST = "166.0.152.222";
+const PROXY_PORT = "24226";
+const PROXY_USER = 'duyne';
+const PROXY_PASS = 'dcom2008';
+const PROXY = `http://${PROXY_HOST}:${PROXY_PORT}`;
+
+const PING_RETRY = 3;
+const PING_DELAY = 10000; // 10s
+const FIRST_WAIT = 30000; // 30s
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function startFalixServer(discordChannel = null) {
+  let browser;
+  const debugBefore = `falix_debug_${Date.now()}.png`;
+  const debugAfter  = `falix_after_click_${Date.now()}.png`;
+
   try {
-    const browser = await puppeteer.launch({
-      headless: 'new',
+    // ====== LAUNCH PUPPETEER ======
+    browser = await puppeteer.launch({
+      headless: process.env.HEADLESS === 'false' ? false : 'new',
       args: [
+        `--proxy-server=${PROXY}`,
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--start-maximized'
+        '--disable-dev-shm-usage',
+        '--window-size=1366,768'
       ],
       defaultViewport: null
     });
 
     const page = await browser.newPage();
 
-    // Kiểm tra IP
-    await page.goto('https://api.ipify.org?format=text');
-    const currentIP = await page.evaluate(() => document.body.innerText);
-    console.log(`🌍 Puppeteer IP hiện tại là: ${currentIP}`);
+    // Proxy login
+    await page.authenticate({ username: PROXY_USER, password: PROXY_PASS });
 
-    // Đọc cookie từ biến môi trường
+    // Check IP
+    try {
+      await page.goto('https://api.ipify.org?format=text', { waitUntil: 'domcontentloaded', timeout: 20000 });
+      console.log('🌍 IP hiện tại:', await page.evaluate(() => document.body.innerText.trim()));
+    } catch (e) {
+      console.warn('⚠️ Không kiểm tra được IP:', e.message);
+    }
+
+    // Set cookies
     const cookieRaw = process.env.FALIX_COOKIE_JSON;
     if (!cookieRaw) throw new Error('Thiếu biến môi trường FALIX_COOKIE_JSON');
+    await page.setCookie(...JSON.parse(cookieRaw));
 
-    const cookies = JSON.parse(cookieRaw);
-    await page.setCookie(...cookies);
-
+    // Vào console
     await page.goto('https://client.falixnodes.net/server/console', {
       waitUntil: 'networkidle2',
-      timeout: 60000
+      timeout: 90000
     });
 
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // Privacy popup
+    await dismissPrivacyPopup(page);
+    await safeScreenshot(page, 'debug_privacy.png'); // debug sau khi click
 
-    // 🛡️ Tự động xử lý popup đánh giá nếu tồn tại
-    const closedPopup = await page.evaluate(() => {
-      const buttons = [...document.querySelectorAll('button')];
-      const cancelBtn = buttons.find(b => b.innerText.trim().toLowerCase() === 'cancel');
-      if (cancelBtn) {
-        cancelBtn.click();
-        return true;
+    // Popup quảng cáo
+    await dismissPopup(page);
+
+    // Screenshot
+    await safeScreenshot(page, debugBefore);
+
+    // Check nút Stop
+    const uiShowsRunning = await page.evaluate(() => {
+      return [...document.querySelectorAll('button')]
+        .some(b => b.innerText.trim().toLowerCase() === 'stop');
+    });
+    if (uiShowsRunning && await pingOnce()) {
+      await browser.close();
+      const msg = '🟢 Server đang chạy sẵn (ping OK).';
+      if (discordChannel) await discordChannel.send({ content: msg, files: [debugBefore] });
+      return { success: true, message: msg };
+    }
+
+    // Click Start
+    const clicked = await page.evaluate(() => {
+      const startBtn = [...document.querySelectorAll('button')]
+        .find(b => b.innerText.trim().toLowerCase() === 'start');
+      if (!startBtn || startBtn.disabled) return false;
+      startBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      startBtn.click();
+      return true;
+    });
+
+    if (!clicked) {
+      await browser.close();
+      const msg = '❌ Không tìm thấy nút Start hoặc nút bị disable.';
+      if (discordChannel) await discordChannel.send({ content: msg, files: [debugBefore] });
+      return { success: false, message: msg };
+    }
+
+    await sleep(2000);
+    await safeScreenshot(page, debugAfter);
+    await browser.close();
+
+    if (discordChannel)
+      await discordChannel.send({ content: '✅ Đã click Start, chờ 30s rồi ping...', files: [debugAfter] });
+
+    await sleep(FIRST_WAIT);
+    return await pingServerWithRetry(discordChannel, PING_RETRY, PING_DELAY);
+
+  } catch (err) {
+    console.error('❌ Lỗi:', err);
+    return { success: false, message: err.message || 'Lỗi không xác định' };
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
+}
+
+// ====== POPUP PRIVACY ======
+async function dismissPrivacyPopup(page) {
+  try {
+    const frames = page.frames();
+    let found = false;
+    for (const frame of frames) {
+      const clicked = await frame.evaluate(() => {
+        const btn = [...document.querySelectorAll('button')]
+          .find(b => b.innerText.toLowerCase().includes('accept'));
+        if (btn) {
+          btn.click();
+          return true;
+        }
+        return false;
+      }).catch(() => false);
+      if (clicked) {
+        console.log('✅ Đã click nút Accept trong privacy popup.');
+        found = true;
+        break;
       }
+    }
+    if (!found) console.log('❌ Không tìm thấy nút Accept trong popup.');
+    await sleep(1000);
+  } catch (e) {
+    console.warn('⚠️ Lỗi khi xử lý privacy popup:', e.message);
+  }
+}
+
+// ====== POPUP ADS ======
+async function dismissPopup(page) {
+  try {
+    const clicked = await page.evaluate(() => {
+      const btn = [...document.querySelectorAll('button')]
+        .find(b => b.innerText.trim().toLowerCase() === 'cancel');
+      if (btn) { btn.click(); return true; }
       return false;
     });
-
-    if (closedPopup) {
-      console.log('✅ Popup đã bấm Cancel. Chờ biến mất...');
-      await new Promise(resolve => setTimeout(resolve, 500));
-      await page.waitForFunction(() => {
-        const popupText = Array.from(document.querySelectorAll('*'))
-          .some(el => el.textContent?.includes('Enjoying Falix?'));
-        return !popupText;
-      }, { timeout: 7000 }).catch(() => {
-        console.warn('⚠️ Không chắc popup đã bị ẩn hoàn toàn.');
-      });
+    if (clicked) {
+      console.log('✅ Đã đóng popup "Enjoying Falix?".');
+      await sleep(1000);
     }
-
-    // 📸 Chụp ảnh màn hình an toàn
-    try {
-      console.log('📸 Đang chụp ảnh falix_debug.png...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      await page.screenshot({ path: 'falix_debug.png', fullPage: true });
-      console.log('✅ Đã chụp ảnh');
-    } catch (screenshotErr) {
-      console.warn('⚠️ Không thể chụp ảnh màn hình:', screenshotErr.message);
-    }
-
-    const buttons = await page.$$('button');
-    console.log(`🔍 Tìm thấy ${buttons.length} nút:`);
-
-    for (const btn of buttons) {
-      const text = await (await btn.getProperty('innerText')).jsonValue();
-      const clean = text?.trim().toLowerCase();
-      console.log('🔘 Nút:', clean);
-
-      if (clean === 'stop') {
-        await browser.close();
-        if (discordChannel) await discordChannel.send({ content: '🟢 Server đã đang chạy sẵn.', files: ['falix_debug.png'] });
-        return { success: true, message: '🟢 Server đã đang chạy sẵn rồi.' };
-      }
-
-      if (clean === 'start') {
-        const isDisabled = await page.evaluate(button => button.disabled, btn);
-        if (isDisabled) {
-          await browser.close();
-          if (discordChannel) await discordChannel.send({ content: '🚫 Nút Start bị vô hiệu hoá. Có thể cần kích hoạt thủ công.', files: ['falix_debug.png'] });
-          return { success: false, message: '🚫 Nút Start bị vô hiệu hoá. Có thể cần kích hoạt lần đầu.' };
-        }
-
-        await btn.click();
-        await browser.close();
-
-        // ✅ Đợi 10 giây rồi kiểm tra trạng thái server
-        if (discordChannel) await discordChannel.send({ content: '⏳ Đang kiểm tra xem server có khởi động không...', files: ['falix_debug.png'] });
-        await new Promise(resolve => setTimeout(resolve, 10000));
-
-        try {
-          const status = await util.status(MC_HOST, MC_PORT);
-          const msg = `🟢 Server đã khởi động thành công! Người chơi: ${status.players.online}/${status.players.max}`;
-          await discordChannel.send(msg);
-          return { success: true, message: msg };
-        } catch (pingErr) {
-          const failMsg = '⚠️ Đã gửi lệnh Start nhưng không thấy server phản hồi sau 10 giây.';
-          await discordChannel.send(failMsg);
-          return { success: false, message: failMsg };
-        }
-      }
-    }
-
-    await browser.close();
-    if (discordChannel) await discordChannel.send({ content: '❌ Không tìm thấy nút Start hay Stop. Giao diện có thể đã thay đổi.', files: ['falix_debug.png'] });
-    return {
-      success: false,
-      message: '❌ Không tìm thấy nút Start hay Stop. Giao diện có thể đã thay đổi.'
-    };
-  } catch (err) {
-    if (discordChannel && fs.existsSync('falix_debug.png')) {
-      await discordChannel.send({ content: `❌ Lỗi khi bật server: ${err.message}`, files: ['falix_debug.png'] });
-    }
-    return {
-      success: false,
-      message: err.message || 'Lỗi không xác định khi truy cập Falix'
-    };
+  } catch (e) {
+    console.warn('⚠️ Không xử lý popup ads:', e.message);
   }
+}
+
+// ====== TIỆN ÍCH ======
+async function safeScreenshot(page, file) {
+  try {
+    await page.screenshot({ path: file, fullPage: true });
+    console.log(`📸 Đã chụp ${file}`);
+  } catch (e) {
+    console.warn('⚠️ Không thể chụp màn hình:', e.message);
+  }
+}
+
+async function pingOnce() {
+  try {
+    await util.status(MC_HOST, MC_PORT, { timeout: 8000 });
+    return true;
+  } catch { return false; }
+}
+
+async function pingServerWithRetry(discordChannel, tries, delayMs) {
+  for (let i = 1; i <= tries; i++) {
+    try {
+      console.log(`🔍 Ping lần ${i}/${tries}...`);
+      const status = await util.status(MC_HOST, MC_PORT, { timeout: 10000 });
+      const msg = `🟢 Server đã khởi động! Người chơi: ${status.players.online}/${status.players.max}`;
+      if (discordChannel) await discordChannel.send(msg);
+      return { success: true, message: msg };
+    } catch (err) {
+      console.warn(`❌ Ping thất bại lần ${i}:`, err.message);
+      if (i < tries) await sleep(delayMs);
+    }
+  }
+  const failMsg = '🔴 Server chưa khởi động sau 30-50s (ping fail).';
+  if (discordChannel) await discordChannel.send(failMsg);
+  return { success: false, message: failMsg };
 }
 
 module.exports = { startFalixServer };
