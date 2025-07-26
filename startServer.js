@@ -12,11 +12,7 @@ const MC_HOST = process.env.MC_HOST;
 const MC_PORT = parseInt(process.env.MC_PORT, 10);
 
 // Proxy config
-const PROXY_HOST = "166.0.152.222";
-const PROXY_PORT = "24226";
-const PROXY_USER = 'duyne';
-const PROXY_PASS = 'dcom2008';
-const PROXY = `http://${PROXY_HOST}:${PROXY_PORT}`;
+
 
 const PING_RETRY = 3;
 const PING_DELAY = 10000; // 10s
@@ -34,7 +30,6 @@ async function startFalixServer(discordChannel = null) {
     browser = await puppeteer.launch({
       headless: process.env.HEADLESS === 'false' ? false : 'new',
       args: [
-        `--proxy-server=${PROXY}`,
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
@@ -46,7 +41,6 @@ async function startFalixServer(discordChannel = null) {
     const page = await browser.newPage();
 
     // Proxy login
-    await page.authenticate({ username: PROXY_USER, password: PROXY_PASS });
 
     // Check IP
     try {
